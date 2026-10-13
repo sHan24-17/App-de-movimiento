@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+  <meta name="description" content="Aplicación móvil accesible de telemetría, tiempos aproximados, distancias de alta exactitud y rastreo dinámico en mapa con Firebase Cloud Firestore.">
+  <meta name="theme-color" content="#1d4ed8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Cloudfire GeoTracker - Rastreo en Tiempo Real y Tiempos Aprox.</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS y JS para Mapa Interactivo Real (Calles OpenStreetMap y Satélite Real Esri sin marcas de agua) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Estilos complementarios y animaciones de alta fidelidad -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="h-full flex flex-col bg-slate-900 text-slate-900 font-sans antialiased overflow-hidden select-none">
+
+  <!-- Enlace accesible de salto al contenido principal (WCAG 2.1 AA) -->
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-brand-700 focus:text-white focus:rounded-lg focus:shadow-xl focus:ring-2 focus:ring-white">
+    Saltar a los controles y telemetría de ruta
+  </a>
+
+  <!-- Locutor en vivo accesible para lectores de pantalla (TalkBack, VoiceOver, NVDA) -->
+  <div id="a11y-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Encabezado superior semántico con navegación y estado del sistema -->
+  <header class="bg-slate-900 text-white px-4 py-3 shadow-md flex items-center justify-between z-30 flex-shrink-0" role="banner">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center text-white text-lg shadow-sm font-bold" aria-hidden="true">
+        📍
+      </div>
+      <div>
+        <h1 class="text-base font-bold leading-tight tracking-tight text-white flex items-center gap-2">
+          <span>Cloudfire Tracker</span>
+          <span id="tracking-status-badge" class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700">En Espera</span>
+        </h1>
+        <p class="text-[11px] text-slate-400">Rastreo GPS de Alta Exactitud &bull; MVC</p>
+      </div>
+    </div>
+
+    <!-- Indicador de conexión Firebase y botón de ajustes -->
+    <div class="flex items-center gap-2">
+      <button type="button" id="firebase-status-badge" onclick="window.cloudfireOpenFirebaseModal ? window.cloudfireOpenFirebaseModal() : (document.getElementById('firebase-modal').classList.remove('hidden'), document.getElementById('firebase-modal').style.display = 'flex')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-900 border border-blue-300 cursor-pointer transition-transform active:scale-95" aria-label="Estado de conexión con Firebase. Pulsa para configurar.">
+        <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+        <span>Conectando Firebase...</span>
+      </button>
+
+      <button type="button" id="btn-open-firebase-modal" onclick="window.cloudfireOpenFirebaseModal ? window.cloudfireOpenFirebaseModal() : (document.getElementById('firebase-modal').classList.remove('hidden'), document.getElementById('firebase-modal').style.display = 'flex')" class="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer" aria-label="Abrir asistente de conexión Firebase" title="Conectar Firebase">
+        <svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+    </div>
+
+  </header>
+
+  <!-- Contenedor Principal: Mapa interactivo + Panel de Telemetría móvil -->
+  <main id="main-content" class="flex-1 relative flex flex-col overflow-hidden bg-slate-100" role="main">
+    
+    <!-- Contenedor del Mapa Leaflet -->
+    <div id="map" class="flex-1 w-full h-full" role="application" aria-label="Mapa dinámico con seguimiento en tiempo real del usuario e icono de movimiento" tabindex="0"></div>
+
+    <!-- Botones flotantes sobre el mapa (Ergonomía móvil para uso con una sola mano) -->
+    <div class="absolute top-3 left-3 z-20 flex flex-col gap-2">
+      <!-- Botón de recentrar posición cuando el usuario se desplaza por el mapa -->
+      <button type="button" id="btn-recenter" class="hidden flex items-center gap-1.5 px-3 py-2 bg-white text-slate-800 text-xs font-semibold rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 active:scale-95 transition-all" aria-label="Centrar el mapa en mi ubicación actual">
+        <span class="text-brand-600 font-bold" aria-hidden="true">🎯</span>
+        <span>Centrar mi posición</span>
+      </button>
+
+      <!-- Indicador satelital de exactitud GPS -->
+      <div id="stat-accuracy-badge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-sm" role="status" aria-label="Precisión del satélite GPS">
+        <span class="w-2 h-2 rounded-full bg-emerald-500" aria-hidden="true"></span>
+        <span>Precisión: <output id="stat-accuracy" class="font-bold">±0m</output></span>
+      </div>
+    </div>
+
+    <!-- Botón flotante para limpiar destino si se encuentra activo -->
+    <div class="absolute top-3 right-14 z-20">
+      <button type="button" id="btn-clear-destination" class="p-2 bg-white text-rose-600 rounded-full shadow-md border border-slate-200 text-xs font-bold hover:bg-rose-50 active:scale-95 transition-all" title="Limpiar punto de destino seleccionado" aria-label="Limpiar punto de destino seleccionado">
+        ❌ Limpiar Destino
+      </button>
+    </div>
+
+    <!-- Panel de Telemetría Inferior Responsivo (Bottom Sheet móvil) -->
+    <section class="bottom-sheet bg-white border-t border-slate-200 p-4 z-20 flex-shrink-0" aria-label="Panel de control y telemetría de viaje" role="region">
+      <!-- Indicador táctil de arrastre visual para diseño móvil -->
+      <div class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-3" aria-hidden="true"></div>
+
+      <!-- Cuadrícula de Métricas Clave de Alta Exactitud (WCAG AA contraste alto) -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3 text-slate-900">
+        <!-- Distancia Recorrida -->
+        <article class="bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center shadow-sm">
+          <h2 class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Distancia Recorrida</h2>
+          <output id="stat-distance" class="text-2xl font-black text-brand-700 tracking-tight block">0 m</output>
+          <span class="text-[10px] text-slate-400">Algoritmo Haversine</span>
+        </article>
+
+        <!-- Tiempo Transcurrido -->
+        <article class="bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center shadow-sm">
+          <h2 class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Tiempo en Ruta</h2>
+          <output id="stat-elapsed-time" class="text-2xl font-black text-slate-800 tracking-tight block">00:00:00</output>
+          <span class="text-[10px] text-slate-400">Sin pausas</span>
+        </article>
+
+        <!-- Velocidad Actual y Promedio -->
+        <article class="bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center shadow-sm">
+          <h2 class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Velocidad Instantánea</h2>
+          <output id="stat-speed" class="text-2xl font-black text-slate-800 tracking-tight block">0.0 km/h</output>
+          <output id="stat-avg-speed" class="text-[10px] text-slate-500 font-semibold block">Prom: 0.0 km/h</output>
+        </article>
+
+        <!-- Tiempo Aprox. (ETA) Dinámico -->
+        <article class="bg-brand-50 border border-brand-200 p-2.5 rounded-xl text-center shadow-sm">
+          <h2 id="stat-eta-label" class="text-[11px] font-semibold text-brand-800 uppercase tracking-wider mb-0.5">Tiempo Aprox. (ETA)</h2>
+          <output id="stat-eta" class="text-2xl font-black text-brand-800 tracking-tight block">--:--</output>
+          <span class="text-[10px] text-brand-600">Calculado en tiempo real</span>
+        </article>
+      </div>
+
+      <!-- Barra de Acciones Principales (Touch-targets mínimos de 48px para móviles) -->
+      <div class="flex items-center gap-2">
+        <!-- Botón Iniciar (Primario) -->
+        <button type="button" id="btn-start" class="flex-1 min-h-[48px] bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 text-sm focus:ring-4 focus:ring-brand-300" aria-label="Iniciar registro del recorrido">
+          <span aria-hidden="true">▶</span>
+          <span>Iniciar Viaje</span>
+        </button>
+
+        <!-- Botón Pausar / Reanudar (Oculto inicialmente) -->
+        <button type="button" id="btn-pause" class="hidden flex-1 min-h-[48px] bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold py-2.5 px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 text-sm focus:ring-4 focus:ring-amber-200" aria-label="Pausar recorrido">
+          <span aria-hidden="true">⏸</span>
+          <span>Pausar</span>
+        </button>
+
+        <!-- Botón Finalizar (Oculto inicialmente) -->
+        <button type="button" id="btn-stop" class="hidden min-h-[48px] bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 text-sm focus:ring-4 focus:ring-rose-300" aria-label="Detener y guardar recorrido">
+          <span aria-hidden="true">⏹</span>
+          <span>Finalizar</span>
+        </button>
+
+        <!-- Botón Reversible (Invertir Ruta / Retorno al Inicio) -->
+        <button type="button" id="btn-reverse" class="min-h-[48px] px-3.5 py-2.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 focus:ring-2 focus:ring-brand-500" aria-pressed="false" aria-label="Activar modo reversible para invertir la ruta y retornar al origen">
+          <span aria-hidden="true">🔄</span>
+          <span class="hidden sm:inline">Invertir Ruta</span>
+          <span class="sm:hidden">Retorno</span>
+        </button>
+
+        <!-- Botón Deshacer último punto -->
+        <button type="button" id="btn-undo" disabled class="min-h-[48px] px-3 py-2.5 bg-white border border-slate-300 text-slate-600 disabled:opacity-40 hover:bg-slate-100 rounded-xl font-semibold text-xs flex items-center gap-1 shadow-sm transition-all active:scale-95" aria-label="Deshacer último punto marcado" title="Deshacer último punto">
+          ↩
+        </button>
+
+        <!-- Botón Captura Multimedia (APIs Media: Cámara y Audio) -->
+        <button type="button" id="btn-media" class="min-h-[48px] px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 focus:ring-2 focus:ring-emerald-400" aria-label="Capturar evidencia con APIs Media (cámara o notas de voz)">
+          <span aria-hidden="true">📸</span>
+          <span class="hidden sm:inline">Media</span>
+        </button>
+
+        <!-- Botón Historial de Rutas -->
+        <button type="button" id="btn-history" class="min-h-[48px] px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 focus:ring-2 focus:ring-slate-400" aria-label="Abrir historial de rutas guardadas">
+          <span aria-hidden="true">📁</span>
+          <span class="hidden sm:inline">Rutas</span>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- MODALES ACCESIBLES (WCAG 2.1 AA con atributos ARIA y trampa de foco)       -->
+  <!-- ========================================================================= -->
+
+  <!-- 1. MODAL DE ASISTENCIA Y CONEXIÓN DE FIREBASE -->
+  <div id="firebase-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="firebase-modal-title">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl" aria-hidden="true">🔥</span>
+          <h2 id="firebase-modal-title" class="text-base font-bold text-slate-900">Guía de Conexión a Firebase</h2>
+        </div>
+        <button type="button" id="btn-close-firebase-modal" class="p-2 text-slate-400 hover:text-slate-700 rounded-lg" aria-label="Cerrar modal de configuración de Firebase">✕</button>
+      </div>
+
+      <div class="overflow-y-auto py-3 space-y-4 text-sm text-slate-700">
+        <!-- Explicación de conexión paso a paso -->
+        <section class="bg-blue-50 border border-blue-200 p-3.5 rounded-xl space-y-2">
+          <h3 class="font-bold text-blue-900 flex items-center gap-1.5">
+            <span>ℹ️</span> ¿Cómo conectar tu proyecto de Firebase?
+          </h3>
+          <ol class="list-decimal list-inside space-y-1 text-xs text-blue-800">
+            <li>Entra a la consola: <a href="https://console.firebase.google.com" target="_blank" rel="noopener" class="underline font-semibold text-blue-950">console.firebase.google.com</a>.</li>
+            <li>Crea un proyecto (o abre uno existente).</li>
+            <li>En el menú izquierdo ve a <strong>Compilación &gt; Firestore Database</strong> y crea tu base de datos en <em>Modo Prueba</em>.</li>
+            <li>En la configuración del proyecto (icono de engranaje ⚙️) agrega una <strong>App Web (&lt;/&gt;)</strong>.</li>
+            <li>Copia el bloque <code>const firebaseConfig = { ... }</code> y pégalo abajo, o rellena los campos.</li>
+          </ol>
+        </section>
+
+        <!-- Pegado Rápido Automático -->
+        <div class="space-y-1">
+          <label for="fb-paste-raw" class="block font-semibold text-xs text-slate-700">
+            ⚡ Pegado Rápido Inteligente (Pega el código de Firebase aquí):
+          </label>
+          <textarea id="fb-paste-raw" rows="2" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 font-mono" placeholder="const firebaseConfig = { apiKey: '...', projectId: '...' };"></textarea>
+        </div>
+
+        <div class="border-t border-slate-200 pt-2">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">O rellena los campos manualmente:</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            <div>
+              <label for="fb-project-id" class="block font-medium text-slate-700 mb-0.5">Project ID *</label>
+              <input type="text" id="fb-project-id" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 font-mono" placeholder="mi-proyecto-123" required>
+            </div>
+            <div>
+              <label for="fb-api-key" class="block font-medium text-slate-700 mb-0.5">API Key *</label>
+              <input type="text" id="fb-api-key" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 font-mono" placeholder="AIzaSy..." required>
+            </div>
+            <div>
+              <label for="fb-auth-domain" class="block font-medium text-slate-700 mb-0.5">Auth Domain</label>
+              <input type="text" id="fb-auth-domain" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 font-mono" placeholder="mi-proyecto.firebaseapp.com">
+            </div>
+            <div>
+              <label for="fb-storage-bucket" class="block font-medium text-slate-700 mb-0.5">Storage Bucket</label>
+              <input type="text" id="fb-storage-bucket" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 font-mono" placeholder="mi-proyecto.appspot.com">
+            </div>
+            <div>
+              <label for="fb-messaging-sender-id" class="block font-medium text-slate-700 mb-0.5">Messaging Sender ID</label>
+              <input type="text" id="fb-messaging-sender-id" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 font-mono" placeholder="123456789">
+            </div>
+            <div>
+              <label for="fb-app-id" class="block font-medium text-slate-700 mb-0.5">App ID</label>
+              <input type="text" id="fb-app-id" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 font-mono" placeholder="1:1234:web:abcd">
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerta de resultado del test de conexión -->
+        <div id="firebase-test-result" class="hidden p-3 rounded-xl border text-xs font-medium" role="alert"></div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2 flex-shrink-0">
+        <button type="button" id="btn-test-firebase" class="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all active:scale-95 border border-slate-300">
+          🔍 Probar Conexión
+        </button>
+        <button type="button" id="btn-save-firebase" class="px-4 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-md transition-all active:scale-95">
+          💾 Guardar y Conectar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. MODAL SELECTOR DE MEDIOS (Cámara o Audio) -->
+  <div id="media-choice-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="media-choice-title">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 id="media-choice-title" class="text-base font-bold text-slate-900">Evidencia Multimedia</h2>
+        <button type="button" id="btn-close-media-choice" class="p-1 text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-xs text-slate-600">Selecciona el tipo de evidencia que deseas anclar a tu coordenada actual en el mapa:</p>
+      <div class="grid grid-cols-2 gap-3">
+        <button type="button" id="btn-choice-photo" class="p-4 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 flex flex-col items-center gap-2 active:scale-95 transition-all font-semibold text-xs">
+          <span class="text-3xl" aria-hidden="true">📷</span>
+          <span>Foto Geotagueada</span>
+        </button>
+        <button type="button" id="btn-choice-audio" class="p-4 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-900 flex flex-col items-center gap-2 active:scale-95 transition-all font-semibold text-xs">
+          <span class="text-3xl" aria-hidden="true">🎤</span>
+          <span>Nota de Voz</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. MODAL DE CÁMARA (API MediaDevices / getUserMedia) -->
+  <div id="camera-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex flex-col justify-between p-4" role="dialog" aria-modal="true" aria-labelledby="camera-modal-title">
+    <div class="flex items-center justify-between text-white z-10">
+      <h2 id="camera-modal-title" class="text-sm font-bold flex items-center gap-2">
+        <span>📷</span> Cámara en Ruta (Geotagging)
+      </h2>
+      <button type="button" id="btn-close-camera" class="px-3 py-1 bg-slate-800 text-white rounded-lg text-xs" aria-label="Cerrar cámara">✕ Salir</button>
+    </div>
+
+    <!-- Visor de Video en vivo -->
+    <div class="relative flex-1 my-3 flex items-center justify-center overflow-hidden rounded-2xl bg-black">
+      <video id="camera-video" playsinline autoplay muted class="w-full h-full object-cover rounded-2xl"></video>
+      <div id="photo-preview-container" class="hidden absolute inset-0 flex items-center justify-center bg-black">
+        <img id="photo-preview-img" alt="Vista previa de la captura fotográfica" class="max-h-full max-w-full object-contain rounded-2xl">
+      </div>
+    </div>
+
+    <div class="space-y-3 z-10">
+      <input type="text" id="photo-note-input" class="w-full px-3 py-2 text-xs bg-slate-800 border border-slate-700 text-white rounded-xl placeholder-slate-400" placeholder="Nota descriptiva opcional (ej: monumento, cruce peligroso)...">
+      <div class="flex items-center justify-center">
+        <button type="button" id="btn-capture-photo" class="w-16 h-16 rounded-full bg-white border-4 border-slate-300 shadow-xl flex items-center justify-center text-slate-800 active:scale-90 transition-transform" aria-label="Disparar captura de foto">
+          <div class="w-12 h-12 rounded-full bg-emerald-500"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. MODAL DE NOTA DE VOZ (API MediaRecorder) -->
+  <div id="audio-modal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="audio-modal-title">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 id="audio-modal-title" class="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <span>🎤</span> Grabar Nota de Voz
+        </h2>
+        <button type="button" id="btn-close-audio" class="p-1 text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+
+      <div class="flex flex-col items-center justify-center py-4 space-y-2">
+        <div id="audio-recording-indicator" class="hidden w-4 h-4 rounded-full bg-rose-600 animate-ping mb-2"></div>
+        <output id="audio-timer" class="text-3xl font-black text-slate-800 font-mono">00:00</output>
+        <p class="text-xs text-slate-500">Pulsa Grabar para registrar comentarios en ruta</p>
+      </div>
+
+      <input type="text" id="audio-note-input" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl" placeholder="Etiqueta breve de la nota...">
+
+      <audio id="audio-player" controls class="hidden w-full h-9 rounded-lg"></audio>
+
+      <div class="flex items-center gap-2 pt-2">
+        <button type="button" id="btn-record-audio" class="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs active:scale-95 transition-all">
+          ● Grabar
+        </button>
+        <button type="button" id="btn-stop-audio" disabled class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs active:scale-95 transition-all">
+          ■ Detener & Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. MODAL DE HISTORIAL DE RUTAS PERSISTIDAS -->
+  <div id="history-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-5 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl" aria-hidden="true">📁</span>
+          <h2 id="history-modal-title" class="text-base font-bold text-slate-900">Historial de Rutas Persistidas</h2>
+        </div>
+        <button type="button" id="btn-close-history-modal" class="p-2 text-slate-400 hover:text-slate-700 rounded-lg" aria-label="Cerrar modal de historial">✕</button>
+      </div>
+
+      <div id="history-sessions-list" class="overflow-y-auto py-3 space-y-3 flex-1 min-h-[220px]">
+        <!-- Sesiones renderizadas dinámicamente por HistoryModalView -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Principal de la Aplicación (Funciona abriendo directamente en navegador y en servidor) -->
+  <script src="js/bundle.js"></script>
+</body>
+</html>
