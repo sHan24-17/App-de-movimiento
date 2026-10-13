@@ -4,7 +4,7 @@
   "description": "Cloudfire GeoTracker - App web movil de telemetria GPS en tiempo real con Firebase y patron MVC",
   "type": "module",
   "scripts": {
-    "test": "node --test \"tests/**/*.test.js\"",
+    "test": "node --test",
     "start": "node server.js"
   },
   "keywords": [
